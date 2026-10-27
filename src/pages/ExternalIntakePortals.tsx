@@ -2521,7 +2521,7 @@ export const ExternalIntakePortals: React.FC<ExternalIntakePortalsProps> = ({
                             {onNavigateToCase && (
                               <button
                                 type="button"
-                                onClick={() => onNavigateToCase(item.id)}
+                                onClick={() => onNavigateToCase((item as any).id)}
                                 className="px-2.5 py-1 bg-[#0b3b60] hover:bg-[#072a45] text-white rounded text-[11px] font-semibold"
                               >
                                 View Dossier
