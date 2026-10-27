@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/aicte-emblem.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b3b60" />
+    <meta name="description" content="CPGRAMS public grievance portal simulator connected to the AICTE complaint registry." />
+    <title>CPGRAMS Public Grievance Portal Simulator</title>
+    <style>
+      /* Keep the CPGRAMS frontend separate visually; shared backend is configured in .env. */
+      .min-h-screen > .bg-slate-900 { display: none !important; }
+      .min-h-screen > div.bg-white.border-b.border-slate-200.shadow-xs button:nth-child(n + 2) {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-900 antialiased font-sans">
+    <div id="root"></div>
+    <script type="module" src="/src/portal-standalone.tsx"></script>
+  </body>
+</html>

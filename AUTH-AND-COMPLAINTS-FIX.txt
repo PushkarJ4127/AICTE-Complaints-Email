@@ -1,0 +1,23 @@
+AICTE CPGRAMS -> All Complaints visibility fix
+
+Why this was happening
+- The previous app had a client-only demo login that set a fake user in sessionStorage.
+- That did not create a Supabase Auth JWT, so PostgREST requests were made as the anonymous role.
+- The database correctly denies anonymous access to all complaint rows, so All Complaints could not list the existing CPGRAMS row.
+
+What this build changes
+- Removes the fake client-only login and clears its stale sessionStorage values.
+- Requires actual Supabase Auth sign-in for the staff dashboard.
+- Keeps complaint RLS in place; do not restore anonymous SELECT on public.complaints.
+- Shows query errors in the complaint list instead of silently appearing empty.
+
+How to use
+1. Stop the old server (Ctrl+C).
+2. Extract this project to a new folder.
+3. Copy your existing .env file into this project's root (next to package.json and RUN-LOCAL.bat). Do not share it.
+4. Start using RUN-LOCAL.bat.
+5. Sign in with a real Supabase Auth user. The seed SQL creates admin@aicte.gov.in, rb.officer@aicte.gov.in, pgrc.officer@aicte.gov.in and reviewer@aicte.gov.in with the demo password Aicte@Admin2026, provided the seed migration successfully created these accounts in this Supabase project.
+6. For the CPGRAMS grievance, sign in as admin@aicte.gov.in (all complaints) or pgrc.officer@aicte.gov.in (PGRC-assigned complaints). Use the password only in the local app; do not post it publicly.
+7. Open All Complaints and click Refresh Registry. You should see the existing grievance if the authenticated account's database profile and RLS policies are correct.
+
+No database migrations are required for this client-side auth fix. Do not apply any broad anonymous SELECT/INSERT policy to the complaints table.

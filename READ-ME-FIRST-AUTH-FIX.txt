@@ -1,0 +1,13 @@
+WHY THIS FIX IS NEEDED
+The prior UI included a fake client-side demo login. It only changed React state/sessionStorage and did not create a real Supabase Auth token. Supabase therefore saw the dashboard as the `anon` role and correctly denied reading `public.complaints` under RLS, although the CPGRAMS row was saved.
+
+USE THIS VERSION
+1. Stop the current dev server with Ctrl+C.
+2. Extract this ZIP to a NEW folder.
+3. Copy your existing .env from the old project into the root of this project folder (the same folder as package.json and RUN-LOCAL.bat). Don't share the file or include it in a public repository.
+4. Run RUN-LOCAL.bat.
+5. Sign in through the AICTE officer login form with a real Supabase Auth account. If you ran the provided seed SQL successfully, try admin@aicte.gov.in with password Aicte@Admin2026. For the CPGRAMS complaint assigned to PGRC, the PGRC account is pgrc.officer@aicte.gov.in with the same seed password.
+6. Open All Complaints and click Refresh Registry. The CPGRAMS grievance already in public.complaints should appear for the Administrator (all complaints) or the PGRC officer (PGRC-assigned complaints), assuming their database profile and existing authenticated RLS policy were created correctly.
+7. If sign-in fails, read the message shown on screen. Do not restore anonymous SELECT or INSERT access to public.complaints. A real authenticated session is required.
+
+This package contains no .env credentials and no new database migrations. Do not rerun SQL migrations just for this frontend change.
