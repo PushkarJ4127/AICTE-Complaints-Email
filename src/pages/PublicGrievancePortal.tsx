@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getInstitutions, type Institution } from '../services/supabase/institutions';
-import { getDepartments, type Department } from '../services/supabase/departments';
-import { createComplaint, getComplaintByNumberOrId, getComplaintUpdates } from '../services/supabase/complaints';
+import { ingestDirectComplaint, getComplaintByNumberOrId, getComplaintUpdates } from '../services/supabase/complaints';
+import { isSupabaseConfigured } from '../services/supabase/client';
 import {
   registerCitizen,
   authenticateCitizen,
@@ -96,7 +96,6 @@ interface PublicGrievancePortalProps {
 export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ onGoToLogin }) => {
   // Reference data
   const [institutions, setInstitutions] = useState<Institution[]>(DEFAULT_INSTITUTIONS_FALLBACK);
-  const [departments, setDepartments] = useState<Department[]>([]);
   // Public Notice Dismissible state
   const [showNotice, setShowNotice] = useState(true);
 
@@ -179,14 +178,10 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
   useEffect(() => {
     async function loadData() {
       try {
-        const [instList, deptList] = await Promise.all([
-          getInstitutions().catch(() => DEFAULT_INSTITUTIONS_FALLBACK),
-          getDepartments().catch(() => []),
-        ]);
+        const instList = await getInstitutions().catch(() => DEFAULT_INSTITUTIONS_FALLBACK);
         if (instList && instList.length > 0) {
           setInstitutions(instList);
         }
-        setDepartments(deptList);
       } catch (err) {
         console.error('Error loading public portal data:', err);
       }
@@ -229,12 +224,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
     : institutions;
   const registrationIdentityField = getIdentityField(regCategory);
   const complaintIdentityField = getIdentityField(complainantType);
-
-  const getAssignedDepartmentId = (): string => {
-    const bureauCode = CATEGORY_BUREAU_MAP[category] || 'PGRC';
-    const dept = departments.find((d) => d.code === bureauCode);
-    return dept?.id || departments[0]?.id || 'd0000000-0000-0000-0000-000000000002';
-  };
 
   // --- REGISTRATION SUBMISSION ---
   const handleRegistrationSubmit = (e: React.FormEvent) => {
@@ -427,42 +416,48 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
   };
 
   const handleFinalSubmit = async () => {
-    const assignedDeptId = getAssignedDepartmentId();
     setIsSubmitting(true);
     setErrorMessage(null);
 
+    if (!isSupabaseConfigured()) {
+      setErrorMessage(
+        'Shared backend is not configured. Direct grievances cannot be written to the Central Grievance Registry until VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are set.'
+      );
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const evidenceToSave = await prepareEvidence();
-      const result = await createComplaint({
-        institution_id: institutionId,
+      const result = await ingestDirectComplaint({
+        institutionId: institutionId,
         title: title.trim(),
         description: description.trim(),
         category,
-        priority: 'Normal', // Urgency level removed from everywhere
-        assigned_department_id: assignedDeptId,
-        created_by: null,
-        complainant_name: complainantName.trim(),
-        complainant_email: complainantEmail.trim(),
-        complainant_phone: complainantPhone.trim(),
-        complainant_type: complainantType,
-        student_roll_no: studentRollNo.trim(),
-        original_language: original?.language ?? null,
-        original_text: original?.text ?? null,
+        priority: 'Normal',
+        complainantName: complainantName.trim(),
+        complainantEmail: complainantEmail.trim(),
+        complainantPhone: complainantPhone.trim(),
+        complainantType,
+        studentRollNo: studentRollNo.trim(),
+        departmentCode: CATEGORY_BUREAU_MAP[category] || 'PGRC',
+        originalLanguage: original?.language ?? null,
+        originalText: original?.text ?? null,
         evidence: evidenceToSave,
       });
 
-      // Record this submission for 7-day rate limiting
       recordGrievanceSubmission(complainantEmail, result.complaint_number);
 
       setShowConfirmModal(false);
       setSuccessComplaintNumber(result.complaint_number);
     } catch (err: unknown) {
       console.error('Public grievance submission error:', err);
-      // Fallback for offline simulation
-      const fallbackNumber = `AICTE-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-      recordGrievanceSubmission(complainantEmail, fallbackNumber);
+      const error = err as { message?: string };
+      setErrorMessage(
+        error?.message ||
+          'The grievance could not be saved to the Central Grievance Registry. Please try again.'
+      );
       setShowConfirmModal(false);
-      setSuccessComplaintNumber(fallbackNumber);
     } finally {
       setIsSubmitting(false);
     }

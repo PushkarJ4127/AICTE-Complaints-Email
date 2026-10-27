@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import {
   getComplaints,
@@ -7,6 +7,7 @@ import {
   addComplaintUpdate,
   getComplaintUpdates,
 } from '../../services/supabase/complaints';
+import { supabase } from '../../services/supabase/client';
 import {
   saveOfficialResponse,
   getOfficialResponses,
@@ -100,47 +101,73 @@ export const RespondComplaint: React.FC<RespondComplaintProps> = ({
     emailError?: string;
   } | null>(null);
 
-  // Load complaints list
-  useEffect(() => {
-    async function loadData() {
-      setIsLoadingList(true);
-      try {
-        const bureauDeptId = !isAdmin ? (profile?.department_id || undefined) : undefined;
-        const { data } = await getComplaints({ departmentId: bureauDeptId, pageSize: 50 });
-        
-        // Ensure non-admins only receive their bureau's cases
-        const allowedCases = isAdmin
-          ? data
-          : data.filter((c) => !bureauDeptId || c.assigned_department_id === bureauDeptId);
+  const loadResponseDesk = useCallback(async () => {
+    setIsLoadingList(true);
+    try {
+      const bureauDeptId = !isAdmin ? (profile?.department_id || undefined) : undefined;
+      const { data } = await getComplaints({ departmentId: bureauDeptId, pageSize: 500 });
 
-        setComplaints(allowedCases);
+      const allowedCases = isAdmin
+        ? data
+        : data.filter((c) => !bureauDeptId || c.assigned_department_id === bureauDeptId);
 
-        // Pre-select if initial ID passed
-        if (initialComplaintId) {
-          const match = allowedCases.find((c) => c.id === initialComplaintId);
-          if (match) {
-            handleSelectComplaint(match);
-          } else {
-            const single = await getComplaintById(initialComplaintId);
-            if (single) {
-              if (isAdmin || single.assigned_department_id === bureauDeptId) {
-                handleSelectComplaint(single);
-              } else {
-                setErrorMessage('Access Restricted: This case is assigned to another Bureau. You can only respond to cases within your bureau.');
-              }
+      setComplaints(allowedCases);
+
+      if (initialComplaintId) {
+        const match = allowedCases.find((c) => c.id === initialComplaintId);
+        if (match) {
+          await handleSelectComplaint(match);
+        } else {
+          const single = await getComplaintById(initialComplaintId);
+          if (single) {
+            if (isAdmin || single.assigned_department_id === bureauDeptId) {
+              await handleSelectComplaint(single);
+            } else {
+              setErrorMessage('Access Restricted: This case is assigned to another Bureau. You can only respond to cases within your bureau.');
             }
           }
-        } else if (allowedCases.length > 0) {
-          handleSelectComplaint(allowedCases[0]);
         }
-      } catch (err) {
-        console.error('Error fetching complaints for response desk:', err);
-      } finally {
-        setIsLoadingList(false);
+      } else if (allowedCases.length > 0) {
+        setSelectedComplaint((prev) => {
+          if (prev && allowedCases.some((c) => c.id === prev.id)) {
+            return allowedCases.find((c) => c.id === prev.id) || prev;
+          }
+          return prev;
+        });
       }
+    } catch (err) {
+      console.error('Error fetching complaints for response desk:', err);
+    } finally {
+      setIsLoadingList(false);
     }
-    loadData();
   }, [initialComplaintId, isAdmin, profile?.department_id]);
+
+  useEffect(() => {
+    void loadResponseDesk();
+  }, [loadResponseDesk]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('respond-desk-live-ingestion')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'complaints' },
+        () => {
+          void loadResponseDesk();
+        }
+      )
+      .subscribe();
+
+    const onComplaintsUpdated = () => {
+      void loadResponseDesk();
+    };
+    window.addEventListener('aicte_complaints_updated', onComplaintsUpdated);
+
+    return () => {
+      window.removeEventListener('aicte_complaints_updated', onComplaintsUpdated);
+      void supabase.removeChannel(channel);
+    };
+  }, [loadResponseDesk]);
 
   const handleSelectComplaint = async (complaint: ComplaintWithRelations) => {
     setSelectedComplaint(complaint);

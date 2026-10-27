@@ -26,7 +26,7 @@ export type NewComplaintInput = {
   complainant_phone?: string | null;
   complainant_type?: string | null;
   student_roll_no?: string | null;
-  source_portal?: 'CPGRAMS' | 'CSS' | null;
+  source_portal?: 'CPGRAMS' | 'CSS' | 'DIRECT' | null;
   external_reference_id?: string | null;
   original_language?: string | null;
   original_text?: string | null;
@@ -54,7 +54,7 @@ export async function getComplaints(options: ComplaintFilterOptions = {}): Promi
     priority,
     sortBy = 'recent',
     page = 1,
-    pageSize = 20,
+    pageSize = 200,
   } = options;
 
   let query = supabase
@@ -164,7 +164,161 @@ export async function getComplaintByNumberOrId(identifier: string): Promise<Comp
   return data as unknown as ComplaintWithRelations;
 }
 
+function notifyComplaintsUpdated(): void {
+  try {
+    window.dispatchEvent(new CustomEvent('aicte_complaints_updated'));
+  } catch {
+    // Non-browser contexts ignore the dashboard refresh ping.
+  }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export interface DirectIntakePayload {
+  institutionId: string;
+  title: string;
+  description: string;
+  category: string;
+  priority?: ComplaintPriority;
+  complainantName: string;
+  complainantEmail: string;
+  complainantPhone: string;
+  complainantType: string;
+  studentRollNo?: string;
+  departmentCode?: string;
+  originalLanguage?: string | null;
+  originalText?: string | null;
+  evidence?: EvidenceItem[];
+}
+
+/**
+ * Register a grievance from the public AICTE portal into public.complaints.
+ * Anonymous users cannot INSERT on that table (RLS); this uses a SECURITY DEFINER
+ * RPC, the same pattern as CPGRAMS ingest_external_complaint.
+ */
+export async function ingestDirectComplaint(
+  payload: DirectIntakePayload
+): Promise<Database['public']['Tables']['complaints']['Row']> {
+  if (!isSupabaseConfigured()) {
+    throw new Error(
+      'Shared backend is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to .env, then restart the server.'
+    );
+  }
+
+  const title = payload.title.trim();
+  const description = payload.description.trim();
+  if (!title || !description) {
+    throw new Error('Grievance title and description are required.');
+  }
+  if (!UUID_RE.test(payload.institutionId)) {
+    throw new Error(
+      'Select an institution from the live AICTE directory. Offline placeholder colleges cannot be saved to the Central Grievance Registry.'
+    );
+  }
+
+  const departmentCode = (payload.departmentCode || 'PGRC').trim().toUpperCase() || 'PGRC';
+  const priority = payload.priority || 'Normal';
+  const directArgs = {
+    p_institution_id: payload.institutionId,
+    p_title: title,
+    p_description: description,
+    p_category: payload.category.trim() || 'General Grievance',
+    p_priority: priority,
+    p_complainant_name: payload.complainantName.trim() || null,
+    p_complainant_email: payload.complainantEmail.trim().toLowerCase() || null,
+    p_complainant_phone: payload.complainantPhone.trim() || null,
+    p_complainant_type: payload.complainantType || 'Student',
+    p_student_roll_no: payload.studentRollNo?.trim() || null,
+    p_department_code: departmentCode,
+    p_original_language: payload.originalLanguage || null,
+    p_original_text: payload.originalText || null,
+    p_evidence: payload.evidence || [],
+  };
+
+  let { data, error } = await supabase.rpc('ingest_direct_complaint', directArgs).single();
+
+  if (error && /ingest_direct_complaint|function|schema cache|could not find/i.test(error.message)) {
+    const fallbackRef = `DIRECT/${new Date().getFullYear()}/${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+    const retry = await supabase
+      .rpc('ingest_external_complaint', {
+        p_source_portal: 'DIRECT',
+        p_external_reference_id: fallbackRef,
+        p_institution_id: payload.institutionId,
+        p_title: title,
+        p_description: description,
+        p_category: payload.category.trim() || 'General Grievance',
+        p_priority: priority,
+        p_complainant_name: payload.complainantName.trim() || null,
+        p_complainant_email: payload.complainantEmail.trim().toLowerCase() || null,
+        p_complainant_phone: payload.complainantPhone.trim() || null,
+        p_complainant_type: payload.complainantType || 'Student',
+        p_student_roll_no: payload.studentRollNo?.trim() || null,
+      })
+      .single();
+    data = retry.data;
+    error = retry.error;
+
+    if (error && /unsupported source portal|source_portal|check constraint/i.test(error.message)) {
+      const allowedRetry = await supabase
+        .rpc('ingest_external_complaint', {
+          p_source_portal: 'CSS',
+          p_external_reference_id: fallbackRef,
+          p_institution_id: payload.institutionId,
+          p_title: title,
+          p_description: description,
+          p_category: payload.category.trim() || 'General Grievance',
+          p_priority: priority,
+          p_complainant_name: payload.complainantName.trim() || null,
+          p_complainant_email: payload.complainantEmail.trim().toLowerCase() || null,
+          p_complainant_phone: payload.complainantPhone.trim() || null,
+          p_complainant_type: payload.complainantType || 'Student',
+          p_student_roll_no: payload.studentRollNo?.trim() || null,
+        })
+        .single();
+      data = allowedRetry.data;
+      error = allowedRetry.error;
+    }
+  }
+
+  if (error) {
+    if (/ingest_direct_complaint|ingest_external_complaint|function|schema cache/i.test(error.message)) {
+      throw new Error(
+        'The shared database needs the direct public-intake migration. Run 20261028000001_direct_public_intake.sql, then retry.'
+      );
+    }
+    if (/row-level security|permission denied|violates row-level/i.test(error.message)) {
+      throw new Error(
+        'Supabase blocked the public grievance. Apply 20261028000001_direct_public_intake.sql so anonymous filings can use the secure ingest RPC.'
+      );
+    }
+    throw new Error(`Could not write grievance to the shared database: ${error.message}`);
+  }
+  if (!data) throw new Error('Supabase did not return the newly created grievance.');
+
+  notifyComplaintsUpdated();
+  return data as Database['public']['Tables']['complaints']['Row'];
+}
+
 export async function createComplaint(payload: NewComplaintInput): Promise<Database['public']['Tables']['complaints']['Row']> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) {
+    return ingestDirectComplaint({
+      institutionId: payload.institution_id,
+      title: payload.title,
+      description: payload.description,
+      category: payload.category,
+      priority: payload.priority,
+      complainantName: payload.complainant_name || '',
+      complainantEmail: payload.complainant_email || '',
+      complainantPhone: payload.complainant_phone || '',
+      complainantType: payload.complainant_type || 'Student',
+      studentRollNo: payload.student_roll_no || undefined,
+      originalLanguage: payload.original_language,
+      originalText: payload.original_text,
+      evidence: payload.evidence,
+    });
+  }
+
   const insertData: Database['public']['Tables']['complaints']['Insert'] = {
     institution_id: payload.institution_id,
     title: payload.title,
@@ -214,10 +368,11 @@ export async function createComplaint(payload: NewComplaintInput): Promise<Datab
     throw new Error('Supabase did not return the newly created complaint.');
   }
 
+  notifyComplaintsUpdated();
   return data as Database['public']['Tables']['complaints']['Row'];
 }
 
-export type ExternalPortalSource = 'CPGRAMS' | 'CSS';
+export type ExternalPortalSource = 'CPGRAMS' | 'CSS' | 'DIRECT';
 
 export interface ExternalIntakePayload {
   source: ExternalPortalSource;

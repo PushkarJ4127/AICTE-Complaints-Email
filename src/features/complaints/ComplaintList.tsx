@@ -57,6 +57,7 @@ export const ComplaintList: React.FC<ComplaintListProps> = ({
         departmentId: effectiveDeptId,
         status: status !== 'ALL' ? status : undefined,
         sortBy,
+        pageSize: 500,
       };
 
       const result = await getComplaints(options);
@@ -89,10 +90,15 @@ export const ComplaintList: React.FC<ComplaintListProps> = ({
     const onExternalStreamStorage = (event: StorageEvent) => {
       if (event.key === 'aicte_external_stream_history') void fetchComplaints();
     };
+    const onComplaintsUpdated = () => {
+      void fetchComplaints();
+    };
     window.addEventListener('storage', onExternalStreamStorage);
+    window.addEventListener('aicte_complaints_updated', onComplaintsUpdated);
 
     return () => {
       window.removeEventListener('storage', onExternalStreamStorage);
+      window.removeEventListener('aicte_complaints_updated', onComplaintsUpdated);
       void supabase.removeChannel(channel);
     };
   }, [fetchComplaints]);

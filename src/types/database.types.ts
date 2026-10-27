@@ -95,7 +95,7 @@ export type ComplaintRow = {
   complainant_phone: string | null;
   complainant_type: string | null;
   student_roll_no: string | null;
-  source_portal?: 'CPGRAMS' | 'CSS' | null;
+  source_portal?: 'CPGRAMS' | 'CSS' | 'DIRECT' | null;
   external_reference_id?: string | null;
   // Mass-complaint clusters, multilingual intake, evidence (migration 20261026000001)
   affected_count?: number;
@@ -279,7 +279,7 @@ export interface Database {
           complainant_phone?: string | null;
           complainant_type?: string | null;
           student_roll_no?: string | null;
-          source_portal?: 'CPGRAMS' | 'CSS' | null;
+          source_portal?: 'CPGRAMS' | 'CSS' | 'DIRECT' | null;
           external_reference_id?: string | null;
           affected_count?: number;
           merged_into?: string | null;
@@ -309,7 +309,7 @@ export interface Database {
           complainant_phone?: string | null;
           complainant_type?: string | null;
           student_roll_no?: string | null;
-          source_portal?: 'CPGRAMS' | 'CSS' | null;
+          source_portal?: 'CPGRAMS' | 'CSS' | 'DIRECT' | null;
           external_reference_id?: string | null;
           affected_count?: number;
           merged_into?: string | null;
@@ -458,6 +458,25 @@ export interface Database {
           p_complainant_phone?: string | null;
           p_complainant_type?: string | null;
           p_student_roll_no?: string | null;
+        };
+        Returns: ComplaintRow[];
+      };
+      ingest_direct_complaint: {
+        Args: {
+          p_institution_id: string;
+          p_title: string;
+          p_description: string;
+          p_category: string;
+          p_priority?: string;
+          p_complainant_name?: string | null;
+          p_complainant_email?: string | null;
+          p_complainant_phone?: string | null;
+          p_complainant_type?: string | null;
+          p_student_roll_no?: string | null;
+          p_department_code?: string | null;
+          p_original_language?: string | null;
+          p_original_text?: string | null;
+          p_evidence?: EvidenceItem[] | null;
         };
         Returns: ComplaintRow[];
       };
