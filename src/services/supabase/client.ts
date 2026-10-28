@@ -18,6 +18,7 @@ export const supabase = createClient<Database>(
   supabasePublishableKey || 'placeholder-key',
   {
     auth: {
+      storage: window.sessionStorage,
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
