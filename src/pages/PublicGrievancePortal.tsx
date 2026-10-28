@@ -18,6 +18,7 @@ import { EvidenceUploader } from '../components/intake/EvidenceUploader';
 import { getOpenComplaintsForInstitution, joinComplaintCluster } from '../services/supabase/clusters';
 import { uploadEvidenceFiles } from '../services/supabase/evidenceStorage';
 import { findSimilarOpenCases, type SimilarCase } from '../services/clustering/clusterDetector';
+import { sendComplaintStatusEmail } from '../services/brevo/email';
 import {
   CheckCircle2, AlertCircle, Send, Building2, User, Search, Tag, X,
   ShieldCheck, GraduationCap, Briefcase, LogOut, AlertTriangle, Check,
@@ -252,6 +253,26 @@ export const PublicGrievancePortal: React.FC<{ onGoToLogin?: () => void }> = () 
         complainantType, studentRollNo: studentRollNo.trim(), departmentCode: CATEGORY_BUREAU_MAP[category] || 'PGRC',
         originalLanguage: original?.language ?? null, originalText: original?.text ?? null, evidence: ev,
       });
+
+      // Dispatch automated registration confirmation email to citizen via Brevo
+      try {
+        await sendComplaintStatusEmail({
+          recipientEmail: complainantEmail.trim(),
+          recipientName: complainantName.trim(),
+          complaintNumber: result.complaint_number,
+          complaintTitle: title.trim(),
+          status: 'Registered / Received',
+          remarks: `Your grievance has been formally registered in the AICTE Central Repository and auto-routed to the ${CATEGORY_BUREAU_MAP[category] || 'PGRC'} bureau for statutory review. Track progress anytime using Reference ID: ${result.complaint_number}.`,
+          officerName: 'Central Intake System',
+          officerDesignation: 'Automated Grievance Registrar',
+          dispatchType: 'Official Acknowledgement',
+          referenceNumber: result.complaint_number,
+          institutionName: selectedTargetInstitution?.institution_name || 'AICTE Technical Institution',
+        });
+      } catch (emailErr) {
+        console.warn('Brevo confirmation email dispatch failed:', emailErr);
+      }
+
       recordGrievanceSubmission(complainantEmail, result.complaint_number);
       setShowConfirmModal(false);
       setSuccessComplaintNumber(result.complaint_number);
@@ -477,8 +498,8 @@ export const PublicGrievancePortal: React.FC<{ onGoToLogin?: () => void }> = () 
               <p className="text-xs text-blue-100/90 leading-relaxed mt-2 bg-black/20 p-3 rounded border border-white/10"><strong>AICTE Redressal Norms:</strong> New complainants must create a one-time registration with their verified email and mobile number.</p>
             </div>
             <div className="flex border-b border-slate-200 bg-slate-50">
-              <button type="button" onClick={() => { setAuthTab('register'); setRegError(null); setLoginError(null); }} className={`flex-1 py-3 text-xs font-bold flex items-center justify-center space-x-2 border-b-2 transition cursor-pointer ${authTab === 'register' ? 'border-[#0b3b60] text-[#0b3b60] bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><UserPlus className="w-4 h-4" /><span>1. New Citizen / Student Registration</span></button>
-              <button type="button" onClick={() => { setAuthTab('login'); setRegError(null); setLoginError(null); }} className={`flex-1 py-3 text-xs font-bold flex items-center justify-center space-x-2 border-b-2 transition cursor-pointer ${authTab === 'login' ? 'border-[#0b3b60] text-[#0b3b60] bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><LogIn className="w-4 h-4" /><span>2. Already Registered? Citizen Login</span></button>
+              <button type="button" onClick={() => { setAuthTab('register'); setRegError(null); setLoginError(null); }} className={`flex-1 py-3 text-xs font-bold flex items-center justify-center space-x-2 border-b-2 transition cursor-pointer ${authTab === 'register' ? 'border-[#0b3b60] text-[#0b3b60] bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><UserPlus className="w-4 h-4" /><span>New Citizen / Student Registration</span></button>
+              <button type="button" onClick={() => { setAuthTab('login'); setRegError(null); setLoginError(null); }} className={`flex-1 py-3 text-xs font-bold flex items-center justify-center space-x-2 border-b-2 transition cursor-pointer ${authTab === 'login' ? 'border-[#0b3b60] text-[#0b3b60] bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><LogIn className="w-4 h-4" /><span>Already Registered? Citizen Login</span></button>
             </div>
             {authTab === 'register' ? (
               <form onSubmit={handleRegistrationSubmit} className="p-6 space-y-5">
