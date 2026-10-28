@@ -114,7 +114,7 @@ export const Login: React.FC<LoginProps> = () => {
           <div className="flex items-center justify-center space-x-2 text-[11px] text-slate-500 mt-1">
             <span>Ministry of Education, Government of India</span>
             <span>•</span>
-            <span className="font-mono">SIH 2024 (Problem ID: 26264)</span>
+            <span className="font-mono">SIH 2026 (Problem ID: 26264)</span>
           </div>
         </div>
 
