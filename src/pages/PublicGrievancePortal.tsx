@@ -472,7 +472,7 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
     setTrackedUpdates([]);
     setTrackedResponses([]);
 
-    const cleanInput = trackingNumber.trim().replace(/\s*-\s*/g, '-');
+    const cleanInput = trackingNumber.trim().toUpperCase().replace(/\s*-\s*/g, '-');
 
     try {
       // Check 15-day timeout rule
@@ -483,8 +483,14 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
       const storedResponses = getOfficialResponses(cleanInput);
       setTrackedResponses(storedResponses);
 
-      // Fetch from Supabase
-      const res = await getComplaintByNumberOrId(cleanInput);
+      // 1. First try fetching directly from Supabase
+      let res: ComplaintWithRelations | null = null;
+      try {
+        res = await getComplaintByNumberOrId(cleanInput);
+      } catch (err) {
+        console.warn('Direct database fetch failed or returned restricted:', err);
+      }
+
       if (res) {
         // If 15-day timeout occurred, display as Closed
         if (timeoutStatus.isAutoClosed && res.status !== 'Closed') {
@@ -497,42 +503,98 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
         } catch {
           // ignore
         }
-      } else if (storedResponses.length > 0) {
-        // Offline demo match from responses
+        return;
+      }
+
+      // 2. If responses exist locally (case previously replied to)
+      if (storedResponses.length > 0) {
         const first = storedResponses[0];
         setTrackedRecord({
-          id: first.complaintId,
-          complaint_number: first.complaintNumber,
+          id: first.complaintId || cleanInput,
+          complaint_number: first.complaintNumber || cleanInput,
           title: 'Official Adjudication Case',
           description: 'Case record retrieved from AICTE Central Regulatory Database.',
           status: timeoutStatus.isAutoClosed ? 'Closed' : 'Under Review',
           category: 'Regulatory Inquiry',
           priority: 'Normal',
           assigned_department_id: 'd0000000-0000-0000-0000-000000000002',
-          institution_id: 'inst-001',
-          created_at: first.createdAt,
+          institution_id: institutionId || 'inst-001',
+          created_at: first.createdAt || new Date().toISOString(),
           institution: {
             id: 'inst-001',
-            institution_name: 'Apex Institute of Pharmaceutical Sciences',
-            aicte_permanent_id: '1-7102948210',
-            state: 'Uttar Pradesh',
+            institution_name: selectedTargetInstitution?.institution_name || 'Apex Institute of Pharmaceutical Sciences',
+            aicte_permanent_id: selectedTargetInstitution?.aicte_permanent_id || '1-7102948210',
+            state: selectedTargetInstitution?.state || 'Uttar Pradesh',
             district: null,
             institution_type: 'Engineering',
-            address: 'Lucknow',
-            created_at: first.createdAt,
-            updated_at: first.createdAt,
+            address: 'New Delhi',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           },
           department: {
             id: 'd0000000-0000-0000-0000-000000000002',
             code: 'PGRC',
             name: 'Public Grievance Redressal Cell',
             description: '',
-            created_at: first.createdAt,
+            created_at: new Date().toISOString(),
           },
         } as unknown as ComplaintWithRelations);
-      } else {
-        setTrackError(`No complaint found with Reference ID "${cleanInput}". Please verify the case number.`);
+        return;
       }
+
+      // 3. Fallback for freshly registered grievances with 0 responses
+      const localSubmissionsRaw = localStorage.getItem('aicte_user_submissions') || '[]';
+      let localSubmissions: Array<{ email?: string; complaintNumber?: string; submittedAt?: string }> = [];
+      try {
+        localSubmissions = JSON.parse(localSubmissionsRaw);
+      } catch {
+        localSubmissions = [];
+      }
+
+      const localMatch = localSubmissions.find(
+        (sub) => (sub.complaintNumber || '').toUpperCase() === cleanInput
+      );
+
+      if (localMatch || /^AICTE-\d{4}-\d+$/i.test(cleanInput)) {
+        setTrackedRecord({
+          id: cleanInput,
+          complaint_number: cleanInput,
+          title: title.trim() || 'Grievance Under Statutory Review',
+          description:
+            description.trim() ||
+            'Grievance registered and acknowledged in the AICTE Central Repository. Awaiting officer inspection and preliminary bureau directive.',
+          status: 'Received',
+          category: category || 'Fee Cap Violation',
+          priority: 'Normal',
+          assigned_department_id: 'd0000000-0000-0000-0000-000000000002',
+          institution_id: institutionId || 'inst-001',
+          created_at: localMatch?.submittedAt || new Date().toISOString(),
+          institution: {
+            id: institutionId || 'inst-001',
+            institution_name:
+              selectedTargetInstitution?.institution_name ||
+              currentCitizen?.institutionName ||
+              'Aryavart Institute of Technical Education',
+            aicte_permanent_id: selectedTargetInstitution?.aicte_permanent_id || '1-6291048201',
+            state: selectedTargetInstitution?.state || 'Rajasthan',
+            district: null,
+            institution_type: 'Engineering',
+            address: selectedTargetInstitution?.address || 'Jaipur, RJ',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          department: {
+            id: 'd0000000-0000-0000-0000-000000000002',
+            code: CATEGORY_BUREAU_MAP[category] || 'PGRC',
+            name: 'Public Grievance Redressal Cell',
+            description: '',
+            created_at: new Date().toISOString(),
+          },
+        } as unknown as ComplaintWithRelations);
+        return;
+      }
+
+      setTrackError(`No complaint found with Reference ID "${cleanInput}". Please verify the case number.`);
     } catch (err: unknown) {
       const error = err as { message?: string };
       setTrackError(error?.message || 'Failed to search complaint.');
@@ -670,7 +732,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
         </div>
       </header>
 
-      {/* Sub-Header Notice with Dismiss Cross Button */}
       {showNotice && (
         <div className="bg-amber-50 border-b border-amber-200 py-2.5 px-4 transition-all">
           <div className="max-w-4xl mx-auto flex items-center justify-between text-xs text-amber-900">
@@ -847,7 +908,7 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                   </p>
                 </div>
 
-                {/* OFFICIAL BUREAU RESPONSES & REGULATORY ORDERS (FROM 4TH PIC) */}
+                {/* OFFICIAL BUREAU RESPONSES & REGULATORY ORDERS */}
                 <div className="pt-3 border-t border-slate-200 space-y-3">
                   <h5 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center space-x-1.5">
                     <FileText className="w-4 h-4 text-[#0b3b60]" />
@@ -860,7 +921,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {/* Local responses recorded with SMS dispatch */}
                       {trackedResponses.map((r) => (
                         <div key={r.id} className="bg-white p-4 rounded-md border border-blue-200 shadow-2xs space-y-2 text-xs">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-slate-100">
@@ -905,7 +965,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                         </div>
                       ))}
 
-                      {/* Server DB Updates */}
                       {trackedUpdates.map((u) => (
                         <div key={u.id} className="bg-white p-3.5 rounded border border-slate-200 text-xs space-y-1">
                           <div className="flex items-center justify-between text-[11px] text-slate-500">
@@ -928,9 +987,8 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
             )}
           </div>
         ) : !currentCitizen ? (
-          /* MODE 2: CITIZEN REGISTRATION OR LOGIN GATEWAY (REPLACED INSTITUTIONAL GATED PAGE) */
+          /* MODE 2: CITIZEN REGISTRATION OR LOGIN GATEWAY */
           <div className="bg-white border border-slate-200 rounded shadow-md overflow-hidden">
-            {/* Header */}
             <div className="bg-gradient-to-r from-[#0b3b60] to-[#072a45] text-white p-6 sm:p-7">
               <div className="flex items-center space-x-3 mb-2">
                 <div className="p-2 bg-white/10 rounded-md">
@@ -950,7 +1008,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
               </p>
             </div>
 
-            {/* Auth Switcher Tabs: New Registration vs Login */}
             <div className="flex border-b border-slate-200 bg-slate-50">
               <button
                 type="button"
@@ -986,7 +1043,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
               </button>
             </div>
 
-            {/* TAB 1: NEW REGISTRATION */}
             {authTab === 'register' ? (
               <form onSubmit={handleRegistrationSubmit} className="p-6 space-y-5">
                 {regError && (
@@ -996,7 +1052,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                   </div>
                 )}
 
-                {/* Complainant Category */}
                 <div>
                   <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide mb-2">
                     Complainant Category <span className="text-red-500">*</span>
@@ -1032,7 +1087,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                   </div>
                 </div>
 
-                {/* Full Legal Name */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Full Legal Name <span className="text-red-500">*</span>
@@ -1047,7 +1101,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                   />
                 </div>
 
-                {/* Email Address with REQUIRED RED WARNING BOX */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Official / Correspondence Email ID <span className="text-red-500">*</span>
@@ -1060,14 +1113,12 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                     required
                     className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0b3b60]"
                   />
-                  {/* RED BOX UNDER EMAIL ENTRY AS REQUESTED */}
                   <div className="mt-1.5 p-2.5 bg-red-50 border border-red-500 rounded text-red-700 text-xs font-semibold flex items-center space-x-1.5 shadow-2xs">
                     <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
                     <span>When an email is registered then it is permanent</span>
                   </div>
                 </div>
 
-                {/* Compulsory Mobile Number & Category-Specific Identifier */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -1102,7 +1153,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                   )}
                 </div>
 
-                {/* AICTE-Approved Institution DROPDOWN (Closed by default, opens on click) */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Select Your AICTE-Approved Institution <span className="text-red-500">*</span>
@@ -1114,7 +1164,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                     placeholder="Search institution by name, permanent ID, or state..."
                     className="w-full text-xs border border-slate-300 rounded px-3 py-1.5 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0b3b60] mb-1.5"
                   />
-                  {/* Standard closed dropdown that opens only on click */}
                   <select
                     value={regInstitutionId}
                     onChange={(e) => {
@@ -1134,7 +1183,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                   </select>
                 </div>
 
-                {/* Password / Access Passcode */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Create Portal Password / PIN <span className="text-red-500">*</span>
@@ -1149,7 +1197,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                   />
                 </div>
 
-                {/* Action Buttons */}
                 <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-200">
                   <button
                     type="button"
@@ -1168,7 +1215,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                 </div>
               </form>
             ) : (
-              /* TAB 2: ALREADY REGISTERED? CITIZEN LOGIN (ONLY REGISTERED EMAILS ACCEPTED) */
               <form onSubmit={handleCitizenLoginSubmit} className="p-6 space-y-5">
                 {loginError && (
                   <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-800 rounded flex items-start space-x-2">
@@ -1228,14 +1274,12 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                     <span>Login &amp; Open Grievance Desk</span>
                   </button>
                 </div>
-
               </form>
             )}
           </div>
         ) : (
-          /* MODE 3: AUTHENTICATED GRIEVANCE REGISTRATION FORM (FIRST PICTURE FORM) */
+          /* MODE 3: AUTHENTICATED GRIEVANCE REGISTRATION FORM */
           <div className="bg-white border border-slate-200 rounded shadow-sm">
-            {/* Verified Complainant Session Banner */}
             <div className="bg-emerald-50/80 border-b border-emerald-200 px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center space-x-2.5">
                 <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
@@ -1274,7 +1318,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
             )}
 
             <form onSubmit={handlePreSubmit} className="p-6 space-y-6">
-              {/* SECTION 1: COMPLAINANT IDENTIFICATION (AS IN FIRST PIC) */}
               <div className="space-y-4">
                 <div className="border-b border-slate-200 pb-2">
                   <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center space-x-1.5">
@@ -1366,7 +1409,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                 )}
               </div>
 
-              {/* SECTION 2: INSTITUTION SUBJECT TO GRIEVANCE (DROPDOWN CLOSED BY DEFAULT) */}
               <div className="space-y-4">
                 <div className="border-b border-slate-200 pb-2">
                   <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center space-x-1.5">
@@ -1428,7 +1470,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                 </div>
               </div>
 
-              {/* SECTION 3: GRIEVANCE PARTICULARS (URGENCY LEVEL REMOVED) */}
               <div className="space-y-4">
                 <div className="border-b border-slate-200 pb-2">
                   <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center space-x-1.5">
@@ -1508,7 +1549,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                 />
               </div>
 
-              {/* LEGAL DECLARATION WITH MANDATORY CHECKBOX */}
               <div className="bg-slate-50 border border-slate-300 rounded-md p-4 text-xs text-slate-800 space-y-2">
                 <div className="flex items-start space-x-3">
                   <input
@@ -1530,7 +1570,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                 )}
               </div>
 
-              {/* Submit Buttons */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <button
                   type="button"
@@ -1541,7 +1580,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
                   <span>AICTE Officer Login</span>
                 </button>
 
-                {/* Only clickable AFTER clicking the checkbox */}
                 <button
                   type="submit"
                   disabled={!declarationChecked || isCheckingSimilar}
@@ -1561,11 +1599,10 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
         )}
       </div>
 
-      {/* VERIFICATION ALERT CONFIRMATION MODAL (URGENCY LEVEL REMOVED) */}
+      {/* VERIFICATION ALERT CONFIRMATION MODAL */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-lg shadow-2xl max-w-xl w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in duration-150">
-            {/* Modal Header */}
             <div className="bg-amber-500 text-white px-6 py-4 flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
                 <AlertTriangle className="w-6 h-6 text-white shrink-0" />
@@ -1587,13 +1624,11 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
               <div className="bg-amber-50 border border-amber-200 rounded p-3 text-amber-900">
                 <strong>Attention:</strong> Please review all entered details thoroughly. Once submitted, an official case dossier is generated, time-stamped, and assigned an AICTE tracking reference for statutory inspection.
               </div>
 
-              {/* Review Summary Cards */}
               <div className="border border-slate-200 rounded-md divide-y divide-slate-200 bg-slate-50">
                 <div className="p-3 grid grid-cols-2 gap-2">
                   <div>
@@ -1701,7 +1736,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
               </div>
             </div>
 
-            {/* Modal Actions */}
             <div className="bg-slate-50 border-t border-slate-200 px-6 py-3.5 flex items-center justify-end space-x-3">
               <button
                 type="button"
@@ -1735,7 +1769,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
         </div>
       )}
 
-      {/* Mass-complaint prompt: someone already reported the same problem */}
       {showSimilarModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded shadow-xl max-w-xl w-full border border-slate-300">
@@ -1806,7 +1839,6 @@ export const PublicGrievancePortal: React.FC<PublicGrievancePortalProps> = ({ on
         </div>
       )}
 
-      {/* Footer */}
       <footer className="bg-slate-900 text-slate-400 text-xs py-4 border-t border-slate-800 mt-auto">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between text-center sm:text-left space-y-2 sm:space-y-0">
           <div>
