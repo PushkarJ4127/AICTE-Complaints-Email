@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { PublicGrievancePortal } from './pages/PublicGrievancePortal';
@@ -21,7 +21,37 @@ const AuthenticatedPortal: React.FC = () => {
   const { user, isAdmin, isLoading } = useAuth();
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [selectedComplaintId, setSelectedComplaintId] = useState<string | null>(null);
-  const [publicView, setPublicView] = useState<'portal' | 'login'>('portal');
+
+  // Checks URL hash or path to see if officer portal was requested
+  const isOfficerRoute = () => {
+    const hash = window.location.hash.toLowerCase();
+    const path = window.location.pathname.toLowerCase();
+    return hash === '#officer' || hash === '#admin' || path.startsWith('/officer') || path.startsWith('/admin');
+  };
+
+  const [publicView, setPublicView] = useState<'portal' | 'login'>(() => {
+    return isOfficerRoute() ? 'login' : 'portal';
+  });
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (isOfficerRoute()) {
+        setPublicView('login');
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const goToOfficerLogin = () => {
+    window.location.hash = 'officer';
+    setPublicView('login');
+  };
+
+  const goToPublicPortal = () => {
+    window.location.hash = '';
+    setPublicView('portal');
+  };
 
   if (isLoading) {
     return (
@@ -38,11 +68,28 @@ const AuthenticatedPortal: React.FC = () => {
     );
   }
 
+  // If user is not logged in as an officer:
   if (!user) {
     if (publicView === 'portal') {
-      return <PublicGrievancePortal onGoToLogin={() => setPublicView('login')} />;
+      return (
+        <div className="flex flex-col min-h-screen">
+          <div className="flex-1">
+            <PublicGrievancePortal onGoToLogin={goToOfficerLogin} />
+          </div>
+          {/* Discrete officer access link in footer only */}
+          <div className="bg-slate-950 py-2 px-4 text-center border-t border-slate-800">
+            <button
+              type="button"
+              onClick={goToOfficerLogin}
+              className="text-[11px] text-slate-500 hover:text-slate-300 transition underline cursor-pointer"
+            >
+              Authorised Official / Bureau Officer Gateway
+            </button>
+          </div>
+        </div>
+      );
     }
-    return <Login onGoToPublicPortal={() => setPublicView('portal')} />;
+    return <Login onGoToPublicPortal={goToPublicPortal} />;
   }
 
   const renderActiveView = () => {
@@ -179,7 +226,6 @@ const AuthenticatedPortal: React.FC = () => {
       <Header onNavigate={setCurrentTab} />
 
       <div className="flex-1 flex max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 gap-6">
-        {/* Left Side Navigation */}
         <Sidebar
           currentTab={currentTab === 'complaint-detail' ? 'complaints' : currentTab}
           onSelectTab={(tab) => {
@@ -188,13 +234,11 @@ const AuthenticatedPortal: React.FC = () => {
           }}
         />
 
-        {/* Main Workspace Area */}
         <main className="flex-1 min-w-0">
           {renderActiveView()}
         </main>
       </div>
 
-      {/* Official Government Footer */}
       <footer className="bg-slate-900 text-slate-400 text-xs py-4 border-t border-slate-800 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-center sm:text-left space-y-2 sm:space-y-0">
           <div>
