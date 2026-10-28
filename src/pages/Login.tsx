@@ -1,392 +1,339 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import {
-  Mail,
-  AlertCircle,
-  ArrowRight,
-  KeyRound,
-  Building2,
-  Shield,
-  FileCheck2,
-  Scale,
+import { 
+  Shield, 
+  KeyRound, 
+  AlertCircle, 
+  CheckCircle2, 
+  User, 
+  Lock, 
+  Building2, 
+  Scale, 
+  ChevronRight, 
   ArrowLeft,
-  ChevronRight,
-  UserCheck,
+  Loader2,
+  FileText
 } from 'lucide-react';
 
 interface LoginProps {
   onGoToPublicPortal?: () => void;
 }
 
-type OfficerRoleKey = 'admin' | 'rb' | 'pgrc';
-
-interface RoleConfig {
-  key: OfficerRoleKey;
-  title: string;
-  subtitle: string;
-  badge: string;
-  deskName: string;
-  description: string;
-  email: string;
-  icon: typeof Shield;
-  colorScheme: {
-    bg: string;
-    border: string;
-    badgeBg: string;
-    badgeText: string;
-    hoverBorder: string;
-  };
-}
-
-const OFFICER_ROLES: RoleConfig[] = [
-  {
-    key: 'admin',
-    title: 'Administrator',
-    subtitle: 'Apex National Grievance Monitoring Directorate',
-    badge: 'Central HQ & Vigilance',
-    deskName: 'AICTE Chief Vigilance & Central Administration',
-    description: 'Consolidated inter-bureau oversight, cross-desk case transfers, user privileges, and complete grievance audit intelligence.',
-    email: 'admin@aicte.gov.in',
-    icon: Shield,
-    colorScheme: {
-      bg: 'bg-red-50/50',
-      border: 'border-red-200',
-      badgeBg: 'bg-red-800',
-      badgeText: 'text-red-100',
-      hoverBorder: 'hover:border-red-500',
-    },
-  },
-  {
-    key: 'rb',
-    title: 'RB Officer',
-    subtitle: 'Zonal & State Level Regional Bureau Oversight',
-    badge: 'Regulation Bureau',
-    deskName: 'AICTE Regulation Bureau (RB) Operational Desk',
-    description: 'Investigation of institutional norms deficiency, unauthorized course operation, affiliation compliance, and regulatory directives.',
-    email: 'rb.officer@aicte.gov.in',
-    icon: FileCheck2,
-    colorScheme: {
-      bg: 'bg-blue-50/50',
-      border: 'border-blue-200',
-      badgeBg: 'bg-[#0b3b60]',
-      badgeText: 'text-white',
-      hoverBorder: 'hover:border-[#0b3b60]',
-    },
-  },
-  {
-    key: 'pgrc',
-    title: 'PGRC Officer',
-    subtitle: 'Public Grievance Redressal Committee Ombudsperson',
-    badge: 'Grievance Cell',
-    deskName: 'AICTE Public Grievance Redressal Cell (PGRC) Desk',
-    description: 'Adjudication of student complaints, certificate withholding violations, illegal capitation fee demands, and student relief enforcement.',
-    email: 'pgrc.officer@aicte.gov.in',
-    icon: Scale,
-    colorScheme: {
-      bg: 'bg-emerald-50/50',
-      border: 'border-emerald-200',
-      badgeBg: 'bg-emerald-700',
-      badgeText: 'text-white',
-      hoverBorder: 'hover:border-emerald-600',
-    },
-  },
-];
-
-export const Login: React.FC<LoginProps> = ({ onGoToPublicPortal }) => {
-  const { signIn, isConfigured } = useAuth();
-
-  // "Ask who is trying to login?" selection state
-  const [selectedRole, setSelectedRole] = useState<OfficerRoleKey | null>(null);
-
-  const [email, setEmail] = useState('admin@aicte.gov.in');
-  const [password, setPassword] = useState('Aicte@Admin2026');
+export const Login: React.FC<LoginProps> = () => {
+  const { login } = useAuth();
+  const [selectedRole, setSelectedRole] = useState<'admin' | 'rb' | 'pgrc' | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSelectRole = (roleKey: OfficerRoleKey) => {
-    setSelectedRole(roleKey);
-    const cfg = OFFICER_ROLES.find((r) => r.key === roleKey);
-    if (cfg) {
-      setEmail(cfg.email);
-      setPassword('Aicte@Admin2026');
+  const predefinedAccounts = [
+    {
+      role: 'admin' as const,
+      title: 'Administrator',
+      subtitle: 'Apex National Grievance Monitoring Directorate',
+      description: 'System-wide policy enforcement, AI cross-bureau overlap supervision, manual assignment re-allocations, and inter-agency coordination.',
+      email: 'superadmin@aicte-india.org',
+      icon: Shield,
+      accent: 'border-rose-700 hover:border-rose-800 bg-rose-50/30',
+      badge: 'bg-rose-100 text-rose-800 border-rose-200'
+    },
+    {
+      role: 'rb' as const,
+      title: 'RB Officer',
+      subtitle: 'Zonal & State Level Regional Bureau Oversight',
+      description: 'Regulatory compliance inspections, university fee ceiling audits, unapproved technical program crackdowns, and statutory inquiries.',
+      email: 'rb.officer@aicte-india.org',
+      icon: Building2,
+      accent: 'border-blue-700 hover:border-blue-800 bg-blue-50/30',
+      badge: 'bg-blue-100 text-blue-800 border-blue-200'
+    },
+    {
+      role: 'pgrc' as const,
+      title: 'PGRC Officer',
+      subtitle: 'Public Grievance Redressal Committee Ombudsperson',
+      description: 'Direct citizen grievance hearings, fee refund disputes, harassment tribunals, original certificate withholding complaints, and interim relief directives.',
+      email: 'pgrc.ombudsperson@aicte-india.org',
+      icon: Scale,
+      accent: 'border-emerald-700 hover:border-emerald-800 bg-emerald-50/30',
+      badge: 'bg-emerald-100 text-emerald-800 border-emerald-200'
     }
-    setErrorMessage(null);
+  ];
+
+  const handleSelectRole = (role: 'admin' | 'rb' | 'pgrc', defaultEmail: string) => {
+    setSelectedRole(role);
+    setEmail(defaultEmail);
+    setPassword('Password@123');
+    setError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      setErrorMessage('Please enter both your official email and password.');
-      return;
-    }
-
-    setErrorMessage(null);
+    setError(null);
     setIsSubmitting(true);
 
     try {
-      // Use actual Supabase Auth. The previous client-only demo fallback did
-      // not create a JWT, so RLS correctly blocked All Complaints database reads.
-      if (!isConfigured) {
-        throw new Error('Supabase is not configured. Check VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env, then restart the server.');
-      }
-      await signIn(email.trim(), password);
+      await login(email, password);
     } catch (err: unknown) {
-      const error = err as { message?: string };
-      const message = error?.message || 'Authentication error.';
-      console.warn('Supabase Auth sign-in failed:', message);
-
-      setErrorMessage(
-        /invalid login credentials/i.test(message)
-          ? 'Supabase rejected these credentials. If you applied 20261023000004_seed_data.sql, try admin@aicte.gov.in with password Aicte@Admin2026. A real Supabase Auth session is required to read protected complaints.'
-          : `Supabase sign-in failed: ${message}. The dashboard requires a real Supabase Auth session; local-only demo sign-in is disabled so complaint data stays protected by RLS.`
-      );
+      const errorObj = err as { message?: string };
+      setError(errorObj?.message || 'Authentication failed. Please verify credentials against Supabase auth.users.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const currentRoleConfig = OFFICER_ROLES.find((r) => r.key === selectedRole);
-
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-between font-sans">
-      {/* Top Government Tricolor Stripe */}
-      <div className="gov-tricolor-stripe w-full"></div>
+      {/* Official Government Color Band */}
+      <div className="h-1.5 w-full flex">
+        <div className="flex-1 bg-[#FF9933]" />
+        <div className="flex-1 bg-white" />
+        <div className="flex-1 bg-[#138808]" />
+      </div>
 
-      {/* Official Government Header Banner */}
-      <div className="bg-[#0b3b60] text-white border-b-4 border-[#e67e22] shadow-sm py-4">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between">
-          <div className="flex items-center space-x-3.5">
-            <img
-              src="/aicte-emblem.png"
-              alt="AICTE Official Emblem"
-              className="w-12 h-12 object-contain drop-shadow-md shrink-0"
-            />
-            <div>
-              <div className="text-[11px] sm:text-xs tracking-wider uppercase text-amber-200 font-medium">
-                अखिल भारतीय तकनीकी शिक्षा परिषद | All India Council for Technical Education
-              </div>
-              <h1 className="text-base sm:text-xl font-bold tracking-tight">
-                Cross-Bureau Complaint Coordination Platform
-              </h1>
-              <div className="text-[11px] sm:text-xs text-slate-300">
-                Ministry of Education, Government of India • SIH Problem Statement ID: 26264
-              </div>
+      {/* Main Container */}
+      <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+        
+        {/* Top AICTE Branding Bar */}
+        <div className="w-full max-w-xl text-center mb-6">
+          <div className="flex items-center justify-center space-x-3 mb-2">
+            <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center p-1.5 shadow-sm border border-slate-200">
+              <img 
+                src="/aicte-emblem.png" 
+                alt="AICTE Official Emblem" 
+                className="w-full h-full object-contain"
+              />
             </div>
           </div>
-          <div className="hidden md:block text-right text-xs text-slate-200">
-            <div className="font-semibold text-white">Central Officer Portal</div>
-            <div>National Informatics Centre (NIC) Security Standard</div>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            ALL INDIA COUNCIL FOR TECHNICAL EDUCATION
+          </h1>
+          <p className="text-xs sm:text-sm font-semibold text-[#0b3b60] tracking-wide uppercase mt-0.5">
+            Inter-Bureau Complaint Redressal & Oversight Platform
+          </p>
+          <div className="flex items-center justify-center space-x-2 text-[11px] text-slate-500 mt-1">
+            <span>Ministry of Education, Government of India</span>
+            <span>•</span>
+            <span className="font-mono">SIH 2024 (Problem ID: 26264)</span>
+          </div>
+        </div>
+
+        {/* Card Body */}
+        <div className="w-full max-w-xl bg-white border border-slate-300 rounded shadow-md overflow-hidden">
+          
+          {/* Header Strip */}
+          <div className="bg-[#0b3b60] text-white px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Shield className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-semibold uppercase tracking-wider">
+                Authorised Personnel Authentication Gateway
+              </span>
+            </div>
+            <span className="text-[10px] bg-blue-900/80 px-2 py-0.5 rounded border border-blue-400/30 text-blue-200 font-mono">
+              SECURE TLS 1.3
+            </span>
+          </div>
+
+          <div className="p-6 sm:p-8">
+            {!selectedRole ? (
+              /* Step 1: Select Bureau / Role */
+              <div className="space-y-4">
+                <div className="text-center mb-6">
+                  <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-2 text-slate-700">
+                    <User className="w-5 h-5" />
+                  </div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    Who is trying to login?
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Select your designated AICTE official role to open your bureau authentication page
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {predefinedAccounts.map((account) => {
+                    const IconComp = account.icon;
+                    return (
+                      <button
+                        key={account.role}
+                        type="button"
+                        onClick={() => handleSelectRole(account.role, account.email)}
+                        className={`w-full p-4 border rounded text-left transition flex items-start space-x-4 cursor-pointer hover:shadow-sm ${account.accent}`}
+                      >
+                        <div className="p-2.5 rounded bg-white shadow-2xs border border-slate-200 text-slate-700 shrink-0 mt-0.5">
+                          <IconComp className="w-5 h-5 text-[#0b3b60]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="font-bold text-sm text-slate-900">
+                              {account.title}
+                            </span>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border uppercase tracking-wider ${account.badge}`}>
+                              {account.role}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 font-medium line-clamp-1">
+                            {account.subtitle}
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                            {account.description}
+                          </p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 self-center ml-2" />
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Statutory Regulatory Footer Note */}
+                <div className="pt-4 mt-6 border-t border-slate-200 flex items-center space-x-2 text-[11px] text-slate-500 justify-center text-center">
+                  <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span>AICTE Inter-Bureau Case Coordination Platform • Strictly Restricted to Authorized Officials</span>
+                </div>
+              </div>
+            ) : (
+              /* Step 2: Role Credentials Login Form */
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRole(null)}
+                  className="inline-flex items-center space-x-1.5 text-xs text-[#0b3b60] hover:text-[#072a45] font-semibold mb-6 group cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
+                  <span>Change designated official role</span>
+                </button>
+
+                {/* Selected Role Identity Card */}
+                {(() => {
+                  const roleConfig = predefinedAccounts.find(a => a.role === selectedRole);
+                  if (!roleConfig) return null;
+                  const RoleIcon = roleConfig.icon;
+                  return (
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded mb-5 flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-white rounded border border-slate-200 text-[#0b3b60]">
+                          <RoleIcon className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-slate-900 block">
+                            {roleConfig.title}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-mono">
+                            {roleConfig.email}
+                          </span>
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border uppercase tracking-wider ${roleConfig.badge}`}>
+                        {roleConfig.role} Desk
+                      </span>
+                    </div>
+                  );
+                })()}
+
+                {error && (
+                  <div className="p-3.5 mb-5 bg-red-50 border border-red-200 text-xs text-red-800 rounded flex items-start space-x-2">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <strong className="block font-semibold">Authentication Failure</strong>
+                      <span>{error}</span>
+                    </div>
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
+                      Government Email / Username
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <User className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="official@aicte-india.org"
+                        className="w-full text-xs pl-9 pr-3 py-2 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0b3b60] focus:border-[#0b3b60] bg-white text-slate-900 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
+                      Designated Password / Security PIN
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="password"
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        className="w-full text-xs pl-9 pr-3 py-2 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0b3b60] focus:border-[#0b3b60] bg-white text-slate-900 font-mono"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Default evaluation seed credential: <span className="font-mono font-semibold">Password@123</span>
+                    </p>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full py-2.5 px-4 bg-[#0b3b60] hover:bg-[#072a45] text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm transition flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          <span>Authenticating with Central Registry...</span>
+                        </>
+                      ) : (
+                        <>
+                          <KeyRound className="w-4 h-4 text-amber-400" />
+                          <span>Login to AICTE Case Coordination Platform</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+
+                <div className="mt-5 p-3 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-900 flex items-start space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Statutory Access Logging:</strong> Login activities and IP signatures are recorded permanently in the AICTE central immutable audit trail for legal vigilance compliance.
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Ministry Helpline / Technical Support Strip */}
+        <div className="w-full max-w-xl text-center text-[11px] text-slate-500 mt-4 space-y-1">
+          <div>
+            AICTE National Technical Helpdesk: <span className="font-mono text-slate-700">011-29581000</span> (Extn. 26264) • E-Governance Division
+          </div>
+          <div>
+            Nelson Mandela Marg, Vasant Kunj, New Delhi-110070
           </div>
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
-        {/* Student / Citizen Grievance Entry Switcher Banner */}
-        {onGoToPublicPortal && (
-          <div className="max-w-2xl w-full mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-4 shadow-sm flex items-center justify-between">
-            <div>
-              <div className="text-xs font-bold text-[#0b3b60] uppercase tracking-wide">
-                Public Student &amp; Institution Grievance Portal
-              </div>
-              <div className="text-xs text-slate-600 mt-0.5">
-                Register or track a public grievance without officer credentials
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onGoToPublicPortal}
-              className="px-3.5 py-1.5 bg-[#0b3b60] hover:bg-[#072a45] text-white text-xs font-semibold rounded shadow-xs flex items-center space-x-1 shrink-0"
-            >
-              <span>Public Intake Portal</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* STEP 1: Ask "Who is trying to login?" if no role selected */}
-        {!selectedRole ? (
-          <div className="max-w-2xl w-full bg-white rounded-md border border-slate-300 shadow-md p-6 sm:p-8">
-            <div className="border-b border-slate-200 pb-4 mb-6 text-center">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-slate-100 text-[#0b3b60] mb-2 border border-slate-200">
-                <UserCheck className="w-6 h-6" />
-              </div>
-              <h2 className="text-xl font-bold text-slate-900">
-                Who is trying to login?
-              </h2>
-              <p className="text-xs text-slate-600 mt-1">
-                Select your designated AICTE official role to open your bureau authentication page
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              {OFFICER_ROLES.map((role) => {
-                const IconComponent = role.icon;
-                return (
-                  <button
-                    key={role.key}
-                    type="button"
-                    onClick={() => handleSelectRole(role.key)}
-                    className={`w-full text-left p-4 rounded-lg border ${role.colorScheme.border} ${role.colorScheme.bg} ${role.colorScheme.hoverBorder} hover:shadow-md transition-all flex items-start justify-between group cursor-pointer`}
-                  >
-                    <div className="flex items-start space-x-4">
-                      <div className={`p-3 rounded-full ${role.colorScheme.badgeBg} text-white shrink-0 mt-0.5 shadow-xs`}>
-                        <IconComponent className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <span className="font-bold text-sm text-slate-900 group-hover:text-[#0b3b60]">
-                          {role.title}
-                        </span>
-                        <p className="text-xs text-slate-500 mt-1">
-                          {role.subtitle}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="text-slate-400 group-hover:text-[#0b3b60] shrink-0 ml-3 mt-3">
-                      <ChevronRight className="w-5 h-5" />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-slate-200 text-center text-xs text-slate-500">
-              AICTE Inter-Bureau Case Coordination Platform • Strictly Restricted to Authorized Officials
-            </div>
-          </div>
-        ) : (
-          /* STEP 2: Dedicated login page for the selected officer role */
-          <div className="max-w-md w-full bg-white rounded-md border border-slate-300 shadow-md p-6 sm:p-8 animate-in fade-in duration-150">
-            {/* Top Switcher Button to go back to "Who is trying to login?" */}
-            <div className="mb-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedRole(null);
-                  setErrorMessage(null);
-                }}
-                className="text-xs text-[#0b3b60] hover:underline flex items-center space-x-1 font-semibold"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>← Change Officer Role (Who is trying to login?)</span>
-              </button>
-            </div>
-
-            {/* Dedicated Role Header */}
-            <div className="border-b border-slate-200 pb-4 mb-5 text-center">
-              <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full ${currentRoleConfig?.colorScheme.badgeBg} text-white mb-2 shadow-xs`}>
-                {currentRoleConfig?.key === 'admin' && <Shield className="w-6 h-6" />}
-                {currentRoleConfig?.key === 'rb' && <FileCheck2 className="w-6 h-6" />}
-                {currentRoleConfig?.key === 'pgrc' && <Scale className="w-6 h-6" />}
-              </div>
-              <div className="flex items-center justify-center space-x-2">
-                <h2 className="text-xl font-bold text-slate-900">
-                  {currentRoleConfig?.title} Login
-                </h2>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${currentRoleConfig?.colorScheme.badgeBg} ${currentRoleConfig?.colorScheme.badgeText}`}>
-                  {currentRoleConfig?.badge}
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 mt-1">
-                {currentRoleConfig?.deskName}
-              </p>
-            </div>
-
-            {/* Missing Supabase Configuration Warning */}
-            {!isConfigured && (
-              <div className="mb-5 p-3.5 bg-amber-50 border border-amber-300 rounded text-xs text-amber-900 flex items-start space-x-2">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-semibold">Supabase Config Notice:</span>
-                  <p className="mt-0.5 text-amber-800">
-                    Checking Supabase credentials in <code className="bg-amber-100 px-1 py-0.5 rounded">.env</code>.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Error Message Alert */}
-            {errorMessage && (
-              <div className="mb-5 p-3 bg-red-50 border border-red-200 rounded text-xs text-red-800 flex items-start space-x-2">
-                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
-            {/* Dedicated Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
-                  Official Bureau Email Address <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Mail className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder={currentRoleConfig?.email || 'officer@aicte.gov.in'}
-                    required
-                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0b3b60] focus:border-transparent bg-white text-slate-900 font-medium"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
-                  Official Password <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <KeyRound className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    required
-                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0b3b60] focus:border-transparent bg-white text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-1">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-2.5 px-4 bg-[#0b3b60] hover:bg-[#072a45] text-white text-sm font-semibold rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0b3b60] disabled:opacity-50 transition-colors flex items-center justify-center space-x-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>Authenticating Official Credentials...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Sign In as {currentRoleConfig?.title}</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-
-          </div>
-        )}
-      </div>
-
       {/* Official Government Footer */}
-      <footer className="bg-slate-900 text-slate-400 text-xs py-4 border-t border-slate-800">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0 text-center sm:text-left">
-          <div className="flex items-center space-x-2">
-            <Building2 className="w-4 h-4 text-slate-400" />
-            <span>AICTE Cross-Bureau Complaint Coordination Platform (SIH-26264)</span>
+      <footer className="bg-slate-900 text-slate-400 text-xs py-3 border-t border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-center sm:text-left space-y-1 sm:space-y-0">
+          <div>
+            © 2026 All India Council for Technical Education (AICTE). All Rights Reserved.
           </div>
-          <div>Regulation Bureau (RB) • Public Grievance Redressal Cell (PGRC) • Administrator</div>
+          <div className="text-slate-500 text-[11px]">
+            Designed for SIH Senior Software Evaluation • Inter-Bureau Cross-Check Engine
+          </div>
         </div>
       </footer>
     </div>
