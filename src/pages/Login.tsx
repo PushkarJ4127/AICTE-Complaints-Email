@@ -20,7 +20,7 @@ interface LoginProps {
 }
 
 export const Login: React.FC<LoginProps> = () => {
-  const { login } = useAuth();
+  const { signIn} = useAuth();
   const [selectedRole, setSelectedRole] = useState<'admin' | 'rb' | 'pgrc' | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -73,7 +73,7 @@ export const Login: React.FC<LoginProps> = () => {
     setIsSubmitting(true);
 
     try {
-      await login(email, password);
+      await signIn(email, password);
     } catch (err: unknown) {
       const errorObj = err as { message?: string };
       setError(errorObj?.message || 'Authentication failed. Please verify credentials against Supabase auth.users.');
