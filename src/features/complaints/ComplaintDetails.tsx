@@ -36,6 +36,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { CaseIntelligence } from './CaseIntelligence';
+import { AIRecommendationPanel } from './AIRecommendationPanel';
 import { sendComplaintStatusEmail } from '../../services/brevo/email';
 
 interface ComplaintDetailsProps {
@@ -643,6 +644,24 @@ export const ComplaintDetails: React.FC<ComplaintDetailsProps> = ({
 
       {/* Mass-complaint count, original-language text and evidence checks */}
       <CaseIntelligence complaint={complaint} />
+
+      {/* AI Investigation Roadmap & Recommendations */}
+      <AIRecommendationPanel
+        ctx={{
+          complaint_number: complaint.complaint_number,
+          title: complaint.title,
+          description: complaint.description,
+          category: complaint.category,
+          priority: complaint.priority,
+          status: complaint.status,
+          bureau: complaint.department?.code || complaint.department?.name || 'PGRC',
+          institution_name: complaint.institution?.institution_name || 'Unknown Institution',
+          institution_state: complaint.institution?.state || '',
+          complainant_type: complaint.complainant_type,
+          received_at: complaint.received_at,
+          due_at: complaint.due_at,
+        }}
+      />
 
       {/* Tabs: Investigation Notes | Assignment History | Audit Trail */}
       <div className="bg-white border border-slate-200 rounded shadow-sm overflow-hidden">
