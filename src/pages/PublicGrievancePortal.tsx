@@ -13,7 +13,6 @@ import {
   type OfficialBureauResponse,
 } from '../services/grievanceStorage';
 import type { ComplaintWithRelations, ComplaintUpdateWithAuthor, EvidenceItem } from '../types/database.types';
-import { MultilingualIntake, type OriginalWords } from '../components/intake/MultilingualIntake';
 import { EvidenceUploader } from '../components/intake/EvidenceUploader';
 import { getOpenComplaintsForInstitution, joinComplaintCluster } from '../services/supabase/clusters';
 import { uploadEvidenceFiles } from '../services/supabase/evidenceStorage';
@@ -105,7 +104,6 @@ export const PublicGrievancePortal: React.FC<{ onGoToLogin?: () => void }> = () 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successComplaintNumber, setSuccessComplaintNumber] = useState<string | null>(null);
 
-  const [original, setOriginal] = useState<OriginalWords | null>(null);
   const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
   const [similarCases, setSimilarCases] = useState<SimilarCase[]>([]);
@@ -251,10 +249,9 @@ export const PublicGrievancePortal: React.FC<{ onGoToLogin?: () => void }> = () 
         institutionId, title: title.trim(), description: description.trim(), category, priority: 'Normal',
         complainantName: complainantName.trim(), complainantEmail: complainantEmail.trim(), complainantPhone: complainantPhone.trim(),
         complainantType, studentRollNo: studentRollNo.trim(), departmentCode: CATEGORY_BUREAU_MAP[category] || 'PGRC',
-        originalLanguage: original?.language ?? null, originalText: original?.text ?? null, evidence: ev,
+        originalLanguage: null, originalText: null, evidence: ev,
       });
 
-      // Dispatch automated registration confirmation email to citizen via Brevo
       try {
         await sendComplaintStatusEmail({
           recipientEmail: complainantEmail.trim(),
@@ -350,7 +347,7 @@ export const PublicGrievancePortal: React.FC<{ onGoToLogin?: () => void }> = () 
 
   const resetForm = () => {
     setSuccessComplaintNumber(null); setTitle(''); setDescription(''); setCategory(COMPLAINT_CATEGORIES[0]);
-    setDeclarationChecked(false); setOriginal(null); setEvidenceItems([]); setEvidenceFiles([]);
+    setDeclarationChecked(false); setEvidenceItems([]); setEvidenceFiles([]);
     setSimilarCases([]); setJoinedCount(null); setJoinError(null);
   };
 
@@ -604,7 +601,6 @@ export const PublicGrievancePortal: React.FC<{ onGoToLogin?: () => void }> = () 
 
               <div className="space-y-4">
                 <div className="border-b border-slate-200 pb-2"><h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center space-x-1.5"><Tag className="w-4 h-4 text-[#0b3b60]" /><span>3. GRIEVANCE PARTICULARS</span></h3></div>
-                <MultilingualIntake description={description} onDescriptionChange={setDescription} title={title} onTitleChange={setTitle} onCategoryChange={setCategory} categories={COMPLAINT_CATEGORIES} original={original} onOriginalChange={setOriginal} />
                 <div><label className="block text-xs font-semibold text-slate-700 mb-1">Subject / Title <span className="text-red-500">*</span></label><input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Summary of grievance" required className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0b3b60]" /></div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Category <span className="text-red-500">*</span></label>
